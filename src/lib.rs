@@ -48,9 +48,13 @@ use chunk::Chunk;
 use frame::Frame;
 use header::Header;
 
-use error::InitError;
-use error::PeekError;
-use error::ReadError;
-use error::WriteError;
+pub use error::InitError;
+pub use error::ReadError;
+pub use error::WriteError;
+
+pub use error::GlobError;
+pub use error::OpenError;
+pub use error::CreateError;
+pub use error::RotationError;
 
 pub use backlog::Backlog;

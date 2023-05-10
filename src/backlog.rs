@@ -9,9 +9,10 @@ use crate::Serialize;
 use crate::Deserialize;
 
 use crate::InitError;
-use crate::PeekError;
 use crate::ReadError;
 use crate::WriteError;
+
+use crate::RotationError;
 
 use std::path::Path;
 
@@ -88,10 +89,12 @@ impl<T> Backlog<T>
         {
             match e
             {
-                WriteError::ChunkFull { .. } => {
+                WriteError::ChunkFull { frame, .. } =>
+                {
                     self.rotate()?;
 
-                    self.chunks[self.writing_chunk].write_entry(entry)?;
+                    self.chunks[self.writing_chunk]
+                        .write_frame(frame)?;
 
                     Ok(())
                 },
@@ -115,7 +118,7 @@ impl<T> Backlog<T>
 
     /// Reads a single entry from the backlog without removing it. If you wish to read and remove
     /// use [Backlog::read_entry].
-    pub fn peek_entry(&mut self) -> Result<T, PeekError>
+    pub fn peek_entry(&mut self) -> Result<T, ReadError>
     {
         Ok(
             self.chunks[self.reading_chunk]
@@ -125,7 +128,7 @@ impl<T> Backlog<T>
 
     /// Reads a number of entries from the backlog without removing them. If you wish to read and
     /// remove them, use [Backlog::read_entries].
-    pub fn peek_entries(&mut self, count: usize) -> Result<Vec<T>, PeekError>
+    pub fn peek_entries(&mut self, count: usize) -> Result<Vec<T>, ReadError>
     {
         let mut entries = Vec::with_capacity(count);
 
@@ -187,17 +190,19 @@ impl<T> Backlog<T>
 impl<T> Backlog<T>
     where T: Serialize + Deserialize
 {
-    fn rotate(&mut self) -> Result<(), WriteError>
+    fn rotate(&mut self) -> Result<(), RotationError>
     {
         // Rotate all chunks backwards, since we increment suffixes. This way we increment from top to bottom.
         for chunk in self.chunks.iter_mut()
         {
             chunk.rotate()
-                .map_err(|e| WriteError::RotationError {path: chunk.path().to_owned(), source: e})?;
+                .map_err(|e| RotationError::RotationError {path: chunk.path().to_owned(), source: e})?;
         }
 
         // Create a new chunk as main to write to.
-        // self.chunks.insert(0, Chunk::create(&self.path, self.chunk_size)?);
+        let new_chunk = Chunk::create(&self.path, self.chunk_size)?;
+
+        self.chunks.insert(0, new_chunk);
 
         // Update internal indices
         self.reading_chunk += 1;  // this one moved by incrementing its suffix

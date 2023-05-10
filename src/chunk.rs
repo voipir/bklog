@@ -3,12 +3,13 @@
 //!
 //! The layout of such file is as follow; TBD
 //!
-use crate::Frame;
-use crate::Header;
+use super::Frame;
+use super::Header;
 
-use crate::InitError;
+use crate::OpenError;
 use crate::ReadError;
 use crate::WriteError;
+use crate::CreateError;
 
 use crate::Serialize;
 use crate::Deserialize;
@@ -60,7 +61,7 @@ impl Chunk
     /// this operation errors out. The file should not be suffixed, since creation only happens at
     /// the start of a backlog. In other words; the first file with extension .bkl. Suffixes are
     /// appended as it gets rotated.
-    pub(crate) fn create(path: &Path, size: u32) -> Result<Self, InitError>
+    pub(crate) fn create(path: &Path, size: u32) -> Result<Self, CreateError>
     {
         let mut file = OpenOptions::new()
             .append(true)
@@ -70,20 +71,20 @@ impl Chunk
             .map_err(|e| {
                 match e.kind()
                 {
-                    ErrorKind::AlreadyExists    => InitError::AlreadyExists      { path: path.to_owned(), source: e },
-                    ErrorKind::PermissionDenied => InitError::InsufficientRights { path: path.to_owned(), source: e },
+                    ErrorKind::AlreadyExists    => CreateError::AlreadyExists      { path: path.to_owned(), source: e },
+                    ErrorKind::PermissionDenied => CreateError::InsufficientRights { path: path.to_owned(), source: e },
 
                     _ => panic!("Unknown IO error has ocurred while creating {path:?} due to {e}")
                 }
             })?;
 
         file.set_len(size as u64)
-            .map_err(|e| InitError::InsufficientSpace { path: path.to_owned(), source: e })?;
+            .map_err(|e| CreateError::InsufficientSpace { path: path.to_owned(), source: e })?;
 
         let header = Header::new();
 
         header.write_into(&mut file)
-            .map_err(|e| InitError::HeaderWriteError { path: path.to_owned(), source: e })?;
+            .map_err(|e| CreateError::HeaderWriteError { path: path.to_owned(), source: e })?;
 
         Ok(Chunk {
             path: path.to_owned(),
@@ -94,7 +95,7 @@ impl Chunk
 
     /// Exclusively open a chunk from a provided path and specify its size limits. For that the
     /// chunk is required to exist, otherwise throwing an error.
-    pub(crate) fn open(path: &Path, size: u32) -> Result<Self, InitError>
+    pub(crate) fn open(path: &Path, size: u32) -> Result<Self, OpenError>
     {
         let position = extract_suffix(&path)?;
 
@@ -105,15 +106,15 @@ impl Chunk
             .open(&path)
             .map_err(|e| {
                 match e.kind() {
-                    ErrorKind::NotFound         => InitError::DoesNotExist { path: path.to_owned(), source: e },
-                    ErrorKind::PermissionDenied => InitError::InsufficientRights { path: path.to_owned(), source: e },
+                    ErrorKind::NotFound         => OpenError::DoesNotExist { path: path.to_owned(), source: e },
+                    ErrorKind::PermissionDenied => OpenError::InsufficientRights { path: path.to_owned(), source: e },
 
                     _ => panic!("Unknown IO error has ocurred while opening {path:?} due to {e}")
                 }
             })?;
 
         let header = Header::read_from(&mut file)
-            .map_err(|e| InitError::HeaderReadError {path: path.to_owned(), source: e})?;
+            .map_err(|e| OpenError::HeaderReadError {path: path.to_owned(), source: e})?;
 
         Ok(Chunk {
             path: path.to_owned(),
@@ -165,6 +166,9 @@ impl Chunk
         self.write_frame(frame)
     }
 
+    /// Write a frame to the chunk. We use this when [Chunk::write_entry] fails due to chunk being
+    /// full. [Backlog] then proceeds to write the frame as provided by the previously returned
+    /// error to a new chunk.
     pub(crate) fn write_frame(&mut self, frame: Frame) -> Result<(), WriteError>
     {
         if self.capacity() >= frame.len()
@@ -217,7 +221,7 @@ impl Chunk
 
 /// Extracts the integer suffix in the extension of the file name. If there is no numeric suffix,
 /// return 0
-fn extract_suffix(path: &Path) -> Result<u32, InitError>
+fn extract_suffix(path: &Path) -> Result<u32, OpenError>
 {
     let ext = path.extension()
         .expect("At this point the extension is known and this error caught. This is just an assertion");
@@ -236,6 +240,33 @@ fn extract_suffix(path: &Path) -> Result<u32, InitError>
         Ok(0)
     } else {
         suffix.parse::<u32>()
-            .map_err(|_| InitError::InvalidSuffix {path: path.to_owned(), suffix: suffix.to_owned()})
+            .map_err(|_| OpenError::InvalidSuffix {path: path.to_owned(), suffix: suffix.to_owned()})
     }
+}
+
+
+#[test]
+fn test_chunk_creation()
+{
+    todo!();  // TODO
+}
+
+
+#[test]
+fn test_chunk_writing()
+{
+    todo!();  // TODO
+}
+
+#[test]
+fn test_chunk_reading()
+{
+    todo!();  // TODO
+}
+
+
+#[test]
+fn test_chunk_rotation()
+{
+    todo!();  // TODO
 }
