@@ -2,9 +2,12 @@
 # A library for reading and writing backlog files.
 #
 [package]
-name    = "librs-bklog"
-version = "0.1.0"
-edition = "2021"
+name        = "bklog"
+version     = "0.1.0"
+edition     = "2021"
+description = "WAL-like corruption resilient storage for IoT local backlogging"
+license     = "MIT"
+authors     = ["Leonhard Weber <leonhard.weber@voipir.cl>"]
 
 [dependencies]
 crc       = {version="3.0.1"}
