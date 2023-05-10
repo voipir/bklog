@@ -85,12 +85,16 @@ impl<T> Backlog<T>
     /// Write a single entry to the backlog.
     pub fn write_entry(&mut self, entry: &T) -> Result<(), WriteError>
     {
-        if let Err(e) = self.chunks[self.writing_chunk].write_entry(entry)
+        let current_chunk = &mut self.chunks[self.writing_chunk];
+
+        if let Err(e) = current_chunk.write_entry(entry)
         {
             match e
             {
-                WriteError::ChunkFull { frame, .. } =>
+                WriteError::ChunkFull {path, size, max_size, frame} =>
                 {
+                    info!(target: "bklog", msg="Write attempt on full chunk. Proceeding to rotate backlogs.", path=?path, size=size, max_size=max_size);
+
                     self.rotate()?;
 
                     self.chunks[self.writing_chunk]
@@ -120,10 +124,8 @@ impl<T> Backlog<T>
     /// use [Backlog::read_entry].
     pub fn peek_entry(&mut self) -> Result<T, ReadError>
     {
-        Ok(
-            self.chunks[self.reading_chunk]
-                .read()?
-        )
+        self.chunks[self.reading_chunk]
+            .read()
     }
 
     /// Reads a number of entries from the backlog without removing them. If you wish to read and
@@ -148,7 +150,9 @@ impl<T> Backlog<T>
     pub fn consume(&mut self, count: usize) -> Result<(), ReadError>
     {
         self.chunks[self.reading_chunk]
-            .advance(count)
+            .advance(count)?;
+
+        Ok(())
     }
 
     /// Read a single entry from the backlog. This results in the read entry to be removed from

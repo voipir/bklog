@@ -21,6 +21,8 @@
 #![deny(missing_docs)]
 
 // Imports
+#[macro_use] extern crate tracing;
+
 use crc::Crc;
 use crc::CRC_32_ISCSI;
 
@@ -55,6 +57,7 @@ pub use error::WriteError;
 pub use error::GlobError;
 pub use error::OpenError;
 pub use error::CreateError;
+pub use error::CursorError;
 pub use error::RotationError;
 
 pub use backlog::Backlog;

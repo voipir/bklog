@@ -37,11 +37,11 @@ pub enum ReadError
     #[error("Failed to deserialize data from backlog file at {path}, offset {offset} due to {source}")]
     DeserializeError {path: PathBuf, offset: u64, source: BincodeError},
 
-    #[error("Failed to advance read pointer in backlog file at {path} due to {source}")]
-    AdvanceError {path: PathBuf, source: std::io::Error},
-
     #[error("Failed to seek/read from backlog file due to {source}")]
     IoError {#[from] source: std::io::Error},
+
+    #[error(transparent)]
+    AdvanceError {#[from] source: CursorError},
 }
 
 
@@ -50,6 +50,9 @@ pub enum WriteError
 {
     #[error("Attempt to write to backlog failed. Chunk is already full at {path}. Attempted to write {size} bytes, but maximum size is {max_size}")]
     ChunkFull {path: PathBuf, size: usize, max_size: usize, frame: Frame},
+
+    #[error("Failed to flush and sync to backlog file at {path} due to {source}")]
+    FlushSyncError {path: PathBuf, source: std::io::Error},
 
     #[error("Could not seek/write/flush to backlog at {path}, due to I/O errors or EOF being reached: {source}")]
     IoError {path: PathBuf, source: std::io::Error},
@@ -110,6 +113,23 @@ pub enum CreateError
 
     #[error("Could not write initial header to backlog file at {path}, due to {source}")]
     HeaderWriteError {path: PathBuf, source: std::io::Error},
+}
+
+
+#[derive(Debug, ThisError)]
+pub enum CursorError
+{
+    #[error("Failed to read entry for the purpose of moving cursor in backlog file at {path} due to {source}")]
+    ReadError {path: PathBuf, source: std::io::Error},
+
+    #[error("Failed to write updated cursors in backlog file at {path} due to {source}")]
+    WriteError {path: PathBuf, source: std::io::Error},
+
+    #[error("Failed to write updated cursors in backlog file at {path} due to {source}")]
+    CursorError {path: PathBuf, source: std::io::Error},
+
+    #[error("Failed to flush and sync to backlog file at {path} while updating cursors due to {source}")]
+    FlushSyncError {path: PathBuf, source: std::io::Error},
 }
 
 

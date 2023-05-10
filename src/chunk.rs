@@ -9,6 +9,7 @@ use super::Header;
 use crate::OpenError;
 use crate::ReadError;
 use crate::WriteError;
+use crate::CursorError;
 use crate::CreateError;
 
 use crate::Serialize;
@@ -67,7 +68,7 @@ impl Chunk
             .append(true)
             .write(true)
             .create_new(true)
-            .open(&path)
+            .open(path)
             .map_err(|e| {
                 match e.kind()
                 {
@@ -97,13 +98,13 @@ impl Chunk
     /// chunk is required to exist, otherwise throwing an error.
     pub(crate) fn open(path: &Path, size: u32) -> Result<Self, OpenError>
     {
-        let position = extract_suffix(&path)?;
+        let position = extract_suffix(path)?;
 
         let mut file = OpenOptions::new()
             .append(true)
             .write(true)
             .create(false)
-            .open(&path)
+            .open(path)
             .map_err(|e| {
                 match e.kind() {
                     ErrorKind::NotFound         => OpenError::DoesNotExist { path: path.to_owned(), source: e },
@@ -142,19 +143,24 @@ impl Chunk
     }
 
     /// Advances read cursor by a count of entries. This marks them as read and consumed.
-    pub(crate) fn advance(&mut self, count: usize) -> Result<(), ReadError>
+    pub(crate) fn advance(&mut self, count: usize) -> Result<(), CursorError>
     {
         for _ in 0..count
         {
             // read the frame to get its length to move forward
             let frame = Frame::from_file_at(&mut self.file, self.header.read_cursor())
-                .map_err(|e| { ReadError::ReadError { path: self.path.to_owned(), source: e}})?;
+                .map_err(|e| { CursorError::ReadError { path: self.path.to_owned(), source: e}})?;
 
             self.header.advance_read_cursor(frame.len());
         }
 
         self.header.write_into(&mut self.file)
-            .map_err(|e| ReadError::AdvanceError { path: self.path.to_owned(), source: e})
+            .map_err(|e| CursorError::WriteError { path: self.path.to_owned(), source: e})?;
+
+        self.flush_and_sync()
+            .map_err(|e| CursorError::FlushSyncError {path: self.path.to_owned(), source: e})?;
+
+        Ok(())
     }
 
     /// Write a slice of bytes to the chunk. If the chunk is full, this operation errors out.
@@ -181,7 +187,8 @@ impl Chunk
             self.header.write_into(&mut self.file)
                 .map_err(|e| WriteError::IoError {path: self.path.to_owned(), source: e})?;
 
-            self.flush_and_sync()?;
+            self.flush_and_sync()
+                .map_err(|e| WriteError::FlushSyncError {path: self.path.to_owned(), source: e})?;
 
             Ok(())
         }
@@ -197,13 +204,10 @@ impl Chunk
     }
 
     /// Flush chunk data to the underlying storage and send a sync operation to the OS.
-    pub(crate) fn flush_and_sync(&mut self) -> Result<(), WriteError>
+    pub(crate) fn flush_and_sync(&mut self) -> Result<(), std::io::Error>
     {
-        self.file.flush()
-            .map_err(|e| WriteError::IoError {path: self.path.to_owned(), source: e})?;
-
-        self.file.sync_all()
-            .map_err(|e| WriteError::IoError {path: self.path.to_owned(), source: e})?;
+        self.file.flush()?;
+        self.file.sync_all()?;
 
         Ok(())
     }
@@ -212,9 +216,12 @@ impl Chunk
     /// already being a suffixed chunk.
     pub(crate) fn rotate(&mut self) -> Result<(), std::io::Error>
     {
-        let new_path = self.path.with_extension(format!("{}.bkl", self.position + 1));
+        let old_path = self.path.clone();
+        self.path    = self.path.with_extension(format!("{}.bkl", self.position + 1));
 
-        std::fs::rename(&self.path, new_path)
+        info!(target: "bklog", msg="Rotating backlog chunk", old_path=%old_path.display(), new_path=%self.path.display());
+
+        std::fs::rename(old_path, &self.path)
     }
 }
 
@@ -227,14 +234,9 @@ fn extract_suffix(path: &Path) -> Result<u32, OpenError>
         .expect("At this point the extension is known and this error caught. This is just an assertion");
 
     let ext_str = ext.to_string_lossy()
-        .to_owned();
+        .into_owned();
 
-    let suffix = ext_str.trim_start_matches(|c| {
-            match c {
-                '0'..='9' => false,
-                _         => true,
-            }
-        });
+    let suffix = ext_str.trim_start_matches(|c: char| {!c.is_ascii_digit()});
 
     if suffix.is_empty() {
         Ok(0)
