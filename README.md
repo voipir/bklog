@@ -3,6 +3,7 @@
 
 [![version](https://img.shields.io/crates/v/bklog.svg?style=flat-square)](https://crates.io/crates/bklog)
 [![docs](https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square)](https://docs.rs/bklog)
+[![build](https://img.shields.io/github/actions/workflow/status/voipir/bklog/rust.yml?style=flat-square)](https://github.com/voipir/bklog/actions/workflows/rust.yml)
 
 An attempt at a WAL-like corruption resilient storage for IoT local backlogging.
 
